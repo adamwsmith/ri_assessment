@@ -60,36 +60,40 @@ cleaner2=function(data){
   return(data)
 }
 
-eshdb_clean=cleaner2(eshdb)
-
+eshdb=cleaner2(eshdb)
 
 ridata=mathdat
-eshdata=eshdb_clean
-num_char=12
+eshdata=eshdb
+
 #matching algo by name
 namematch=function(ridata,eshdata,num_char){
   maindf=data.frame()
   for(r in 1:length(ridata[,1])){
-    rowdat=list()
+    numdat=data.frame()
+    namdat=data.frame()
+    rowdat=data.frame()
     name.source=ridata$school[r] #pick up school name each row
     name.source=gsub(" ","",name.source) #kill spaces
     name.source=gsub("\\.","",name.source) #kill periods
     name.source=tolower(name.source) #make lower case
+    name.source=gsub("senior","sr",name.source) #translate "Senior" to abbrev.
     name.source=substr(name.source,1,num_char) #clip string to length of num_char input var.
     for(t in 1:length(eshdata[,1])){
       name.target=eshdata$school_name[t] #pick up school name each row
       name.target=gsub(" ","",name.target) #kill spaces
       name.target=gsub("\\.","",name.target) #kill periods
       name.target=tolower(name.target) #make lower case
+      name.target=gsub("senior","sr",name.target) #translate "Senior" to abbrev.
       name.target=substr(name.target,1,num_char) #clip string to length of num_char input var.
       if(name.source==name.target){
-        rowdat=c(ridata[r,],
+        numdat=c(ridata[r,3:11],
                      "frl_percent"=eshdata$frl_percent[t], #percent eligible for lunch subsidy
                      "stupschool"=(eshdata$num_students[t]/eshdata$num_schools[t]), #average student/school/dist
                      "teachpschool"=(eshdata$num_teachers[t]/eshdata$num_schools[t]), #average teach/school/dist
                      "pctc2_spent"=eshdata$pct_c2_spent[t], #percent of C2 budget spent
                      "bwps"=eshdata$ia_bandwidth_per_student_kbps[t]) #bandwidth per student
-        
+        namdat=ridata[r,1:2]
+        rowdat=cbind(namdat,numdat)
       }
     }
     maindf=rbind(maindf,rowdat)
@@ -98,4 +102,76 @@ namematch=function(ridata,eshdata,num_char){
   return(maindf)
 }
 
-ridata[7,]
+namematch2=function(ridata,eshdata,num_word){
+  maindf=data.frame()
+  for(r in 1:length(ridata[,1])){
+    numdat=data.frame()
+    namdat=data.frame()
+    rowdat=data.frame()
+    name.source=ridata$school[r] #pick up school name each row
+    name.source=tolower(name.source) #make lower case
+    name.source=strsplit(name.source," ") #split by spaces
+    for(l in 1:length(name.source[[1]])){
+      name.source[[1]][l]=gsub("\\.","",name.source[[1]][l]) #kill periods
+      if(name.source[[1]][l]=="senior"){ #change "Senior" to "sr
+        name.source[[1]][l]="sr"
+      }
+    }
+    for(t in 1:length(eshdata[,1])){
+      name.target=ridata$school[r] #pick up school name each row
+      name.target=tolower(name.target) #make lower case
+      name.target=strsplit(name.target," ") #split by spaces
+      for(l in 1:length(name.target[[1]])){
+        name.target[[1]][l]=gsub("\\.","",name.target[[1]][l]) #kill periods
+        if(name.target[[1]][l]=="senior"){ #change "Senior" to "sr
+          name.target[[1]][l]="sr"
+        }
+      }
+      mscore=logical()
+      for(p in 1:length(name.source[[1]])){
+        if(name.source[[1]][p]==name.target[[1]][p]){ ### WORK OUT COMPARISON CONDITIONS TO CONSTRUCT DF
+          mscore[p]=T
+        } else {
+          mscore[p]=F
+        }
+      }
+      if(all(mscore=TRUE)){ 
+       numdat=c(ridata[r,3:11],
+                 "frl_percent"=eshdata$frl_percent[t], #percent eligible for lunch subsidy
+                 "stupschool"=(eshdata$num_students[t]/eshdata$num_schools[t]), #average student/school/dist
+                 "teachpschool"=(eshdata$num_teachers[t]/eshdata$num_schools[t]), #average teach/school/dist
+                 "pctc2_spent"=eshdata$pct_c2_spent[t], #percent of C2 budget spent
+                 "bwps"=eshdata$ia_bandwidth_per_student_kbps[t]) #bandwidth per student
+        namdat=ridata[r,1:2]
+        rowdat=cbind(namdat,numdat)
+      }
+      
+    }
+    maindf=rbind(maindf,rowdat)
+  }
+  maindf=as.data.frame(maindf)
+  return(maindf)
+}
+
+bigdat2=namematch2(mathdat,eshdb,1)
+bigdat=namematch(mathdat,eshdb,5)
+
+scrubNA=function(data){
+  exclude=numeric()
+  for(i in 1:length(data[,1])){
+    if(is.na(data$frl_percent[i])){
+      exclude=c(exclude,i)
+    }
+  }
+  return(data[-exclude,])
+}
+
+bigdat2=scrubNA(bigdat2)
+
+par(mfrow=c(2,2))
+hist(bigdat$num_enrolled, main="Number of Enrolled")
+hist(bigdat$bwps, main="Bandwidth Per Student")
+hist(bigdat$pctc2_spent, main="Percent C2 Budget Spent")
+hist(bigdat$meetandexceed, main="Percent of students Meeting or Exceeding Standard")
+
+mod1=lm()
